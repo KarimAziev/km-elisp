@@ -137,6 +137,363 @@ return a string representation of it."
   :group 'km-elisp
   :type 'function)
 
+(define-widget 'km-elisp-menu-item-widget 'lazy
+  "Define a widget for creating and customizing menu items with various properties.
+
+Argument OFFSET is the number of spaces to indent the widget.
+
+Argument TYPE specifies the type of the widget, which is a repeatable
+choice of either a string or a vector.
+
+Argument STRING is a simple string value.
+
+Argument VECTOR is a vector containing a string, a radio button, and a set.
+
+Argument RADIO is a radio button with a default value of `emacs-lisp-mode'.
+
+Argument FUNCTION is a function to be executed.
+
+Argument SEXP is a symbolic expression.
+
+Argument SET is a set of inline lists.
+
+Argument LIST is an inline list containing constants and values.
+
+Argument CONST is a constant value.
+
+Argument STYLE is a constant representing the style.
+
+Argument TOGGLE is a constant representing a toggle option.
+
+Argument ACTIVE is a constant representing the active state.
+
+Argument SELECTED is a constant representing the selected state.
+
+Argument LABEL is a constant representing the label.
+
+Argument SUFFIX is a constant representing the suffix.
+
+Argument VISIBLE is a constant representing the visibility.
+
+Argument KEYS is a constant representing the keys.
+
+Argument HELP is a constant representing the help text."
+  :offset 4
+  :type '(repeat
+          (choice
+           string
+           (vector
+            (string)
+            (radio :value emacs-lisp-mode
+             (function)
+             (sexp))
+            (set :inline t
+             (list :inline t
+              (const :style)
+              (radio :value toggle
+               (const toggle)
+               (const radio)))
+             (list :inline t
+              (const :active)
+              (sexp))
+             (list
+              :inline t
+              (const :selected)
+              (sexp))
+             (list
+              :inline t
+              (const :label)
+              (sexp))
+             (list
+              :inline t
+              (const :suffix)
+              (sexp))
+             (list
+              :inline t
+              (const :visible)
+              (sexp))
+             (list
+              :inline t
+              (const :keys)
+              (string))
+             (list
+              :inline t
+              (const :help)
+              (string))))
+           km-elisp-menu-item-widget)))
+
+
+
+(defcustom km-elisp-emacs-lisp-mode-menu '("Emacs-Lisp"
+                                           ["Add File Local variable"
+                                            add-file-local-variable]
+                                           ["Add Directory Local variable"
+                                            add-dir-local-variable]
+                                           ["Elisp Scan" elisp-scan-menu]
+                                           ["Jump to item" elmenu-jump :visible
+                                            (featurep
+                                             'elmenu-jump)]
+                                           ["Show libraries that depend on file"
+                                            km-elisp-print-feature-dependents]
+                                           ["Find library " find-library]
+                                           ["Load library " load-library]
+                                           ["Unload Feature" unload-feature]
+                                           ["Bundle items"
+                                            elisp-bundle-include-undefined
+                                            :visible (featurep 'elisp-bundle)]
+                                           ["Generate org readme"
+                                            org-autodoc-async]
+                                           ["Indent Line" lisp-indent-line]
+                                           ["Indent Region" indent-region
+                                            :help
+                                            "Indent each nonblank line in the region"
+                                            :active mark-active]
+                                           ["Comment Out Region" comment-region
+                                            :help
+                                            "Comment or uncomment each line in the region"
+                                            :active mark-active]
+                                           "---"
+                                           ["Edebug" edebug-defun
+                                            :help
+                                            "Evaluate the top level form point is in, stepping through with Edebug"
+                                            :keys "C-u C-M-x"]
+                                           ("Compile"
+                                            ["Byte-compile This File"
+                                             emacs-lisp-byte-compile
+                                             :help
+                                             "Byte compile the file containing the current buffer"]
+                                            ["Byte-compile and Load"
+                                             emacs-lisp-byte-compile-and-load
+                                             :help
+                                             "Byte-compile the current file (if it has changed), then load compiled code"]
+                                            ["Byte-recompile Directory..."
+                                             byte-recompile-directory
+                                             :help
+                                             "Recompile every `.el' file in DIRECTORY that needs recompilation"]
+                                            ["Disassemble Byte Compiled Object..."
+                                             disassemble
+                                             :help
+                                             "Print disassembled code for OBJECT in a buffer"])
+                                           ("Linting"
+                                            ["Lint Defun" elint-defun
+                                             :help "Lint the function at point"]
+                                            ["Lint Buffer" elint-current-buffer
+                                             :help "Lint the current buffer"]
+                                            ["Lint File..." elint-file
+                                             :help "Lint a file"]
+                                            ["Lint Directory..." elint-directory
+                                             :help "Lint a directory"])
+                                           ("Profiling"
+                                            ["Start Native Profiler..."
+                                             profiler-start
+                                             :help
+                                             "Start recording profiling information"]
+                                            ["Show Profiler Report"
+                                             profiler-report
+                                             :help
+                                             "Show the current profiler report"
+                                             :active (and (featurep 'profiler)
+                                                      (profiler-running-p))]
+                                            ["Stop Native Profiler"
+                                             profiler-stop
+                                             :help
+                                             "Stop recording profiling information"
+                                             :active (and (featurep 'profiler)
+                                                      (profiler-running-p))]
+                                            "---"
+                                            ["Instrument Function..."
+                                             elp-instrument-function
+                                             :help
+                                             "Instrument a function for profiling"]
+                                            ["Instrument Package..."
+                                             elp-instrument-package
+                                             :help
+                                             "Instrument for profiling all function that start with a prefix"]
+                                            ["Show Profiling Results"
+                                             elp-results
+                                             :help
+                                             "Display current profiling results"]
+                                            ["Reset Counters for Function..."
+                                             elp-reset-function
+                                             :help
+                                             "Reset the profiling information for a function"]
+                                            ["Reset Counters for All Functions"
+                                             elp-reset-all
+                                             :help
+                                             "Reset the profiling information for all functions being profiled"]
+                                            "---"
+                                            ["Remove Instrumentation for All Functions"
+                                             elp-restore-all
+                                             :help
+                                             "Restore the original definitions of all functions being profiled"]
+                                            ["Remove Instrumentation for Function..."
+                                             elp-restore-function
+                                             :help
+                                             "Restore an instrumented function to its original definition"])
+                                           ("Tracing"
+                                            ["Trace Function..." trace-function
+                                             :help
+                                             "Trace the function given as an argument"]
+                                            ["Trace Function Quietly..."
+                                             trace-function-background
+                                             :help
+                                             "Trace the function with trace output going quietly to a buffer"]
+                                            "---"
+                                            ["Untrace All" untrace-all
+                                             :help
+                                             "Untrace all currently traced functions"]
+                                            ["Untrace Function..."
+                                             untrace-function
+                                             :help
+                                             "Untrace function, and possibly activate all remaining advice"])
+                                           ["Construct Regexp" re-builder
+                                            :help
+                                            "Construct a regexp interactively"]
+                                           ["Melpazoid"
+                                            melpazoid-flymake-compile
+                                            :visible
+                                            (featurep 'melpazoid-flymake)]
+                                           ["Flymake" flymenu-flymake :visible
+                                            (featurep 'flymake-menu)]
+                                           ["Check Documentation Strings"
+                                            checkdoc
+                                            :help
+                                            "Check documentation strings for style requirements"]
+                                           ["Auto-Display Documentation Strings"
+                                            eldoc-mode
+                                            :help
+                                            "Display the documentation string for the item under cursor"
+                                            :style toggle
+                                            :selected (bound-and-true-p
+                                                       eldoc-mode)]
+                                           ["Autoformat message"
+                                            autoformat-message-mode
+                                            :style toggle
+                                            :visible (featurep
+                                                      'autoformat-message)
+                                            :selected autoformat-message-mode
+                                            :help
+                                            "Inside message automatically add format string with %s escapes"]
+                                           ["Long line mode" long-line-mode
+                                            :style toggle
+                                            :visible (featurep 'long-line)
+                                            :selected long-line-mode
+                                            :help
+                                            "Show or hide fill column indicator after save"]
+                                           ["Prettier elisp mode"
+                                            prettier-elisp-mode
+                                            :visible (fboundp 'prettier-mode)
+                                            :style toggle
+                                            :selected prettier-elisp-mode
+                                            :help
+                                            "Format current top level form on file save"]
+                                           ["Prettier buffer"
+                                            prettier-elisp-buffer :visible
+                                            (fboundp
+                                             'prettier-elisp-buffer)]
+                                           ["Prettier function" prettier-elisp
+                                            :visible (fboundp 'prettier-elisp)]
+                                           ["Profiling" profiler-extra-menu
+                                            :visible (fboundp
+                                                      'profiler-extra-menu)]
+                                           ["Explain pause mode"
+                                            explain-pause-mode
+                                            :style toggle
+                                            :visible
+                                            (fboundp 'explain-pause-mode)
+                                            :selected (bound-and-true-p
+                                                       explain-pause-mode)]
+                                           ["Explain pause top"
+                                            explain-pause-top
+                                            :visible
+                                            (fboundp 'explain-pause-top)
+                                            :selected (bound-and-true-p
+                                                       explain-pause-mode)]
+                                           ["Show Startup results table"
+                                            benchmark-init/show-durations-tabulated
+                                            :visible
+                                            (fboundp
+                                             'benchmark-init/show-durations-tabulated)]
+                                           ["Show Startup results tree"
+                                            benchmark-init/show-durations-tree
+                                            :visible
+                                            (fboundp
+                                             'benchmark-init/show-durations-tree)]
+                                           ["Use package report"
+                                            use-package-report
+                                            :active
+                                            use-package-compute-statistics]
+                                           ["Esup" esup t]
+                                           ["Bench buffer" bench-buffer t])
+  "List of menu bar items to add in `emacs-lisp-mode-map'.
+
+Usage:
+\\=(easy-menu-define emacs-lisp-mode-menu emacs-lisp-mode-map
+  \"Menu for Emacs Lisp mode.\" km-elisp-emacs-lisp-mode-menu)
+
+Every item can be either
+- string: as separator or submenu title,
+- vector: a menu item [ NAME CALLBACK [ KEYWORD ARG ]... ]
+- list of [STRING [MENU ITEM]... ]
+
+A menu item may have the form:
+
+   [ NAME CALLBACK [ KEYWORD ARG ]... ]
+
+where NAME and CALLBACK have the same meanings as above, and each
+optional KEYWORD and ARG pair should be one of the following:
+
+ :keys KEYS
+    KEYS is a string; a keyboard equivalent to the menu item.
+    This is normally not needed because keyboard equivalents are
+    usually computed automatically.  KEYS is expanded with
+    `substitute-command-keys' before it is used.
+
+ :key-sequence KEYS
+    KEYS is a hint for speeding up Emacs's first display of the
+    menu.  It should be nil if you know that the menu item has no
+    keyboard equivalent; otherwise it should be a string or
+    vector specifying a keyboard equivalent for the menu item.
+
+ :active ENABLE
+    ENABLE is an expression; the item is enabled for selection
+    whenever this expression's value is non-nil.  `:enable' is an
+    alias for `:active'.
+
+ :visible INCLUDE
+    INCLUDE is an expression; this item is only visible if this
+    expression has a non-nil value.  `:included' is an alias for
+    `:visible'.
+
+ :label FORM
+    FORM is an expression that is dynamically evaluated and whose
+    value serves as the menu item's label (the default is NAME).
+
+ :suffix FORM
+    FORM is an expression that is dynamically evaluated and whose
+    value is concatenated with the menu entry's label.
+
+ :style STYLE
+    STYLE is a symbol describing the type of menu item; it should
+    be `toggle' (a checkbox), or `radio' (a radio button), or any
+    other value (meaning an ordinary menu item).
+
+ :selected SELECTED
+    SELECTED is an expression; the checkbox or radio button is
+    selected whenever the expression's value is non-nil.
+
+ :help HELP
+    HELP is a string, the help to display for the menu item.
+
+Alternatively, a menu item can be a string.  Then that string
+appears in the menu as unselectable text.  A string consisting
+solely of dashes is displayed as a menu separator.
+
+Alternatively, a menu item can be a list with the same format as
+MENU."
+  :group 'km-elisp
+  :type 'km-elisp-menu-item-widget)
+
 
 ;;;###autoload
 (defun km-elisp-macroexpand-sexp-at-point (sexp)
@@ -397,6 +754,7 @@ Argument FEAT is the name of the feature to analyze as a string."
                                (mapconcat #'km-elisp-make-feat-link
                                           feat-requires "\n")))
                      #'special-mode)))
+
 
 (provide 'km-elisp)
 ;;; km-elisp.el ends here
