@@ -6,7 +6,7 @@
 ;; URL: https://github.com/KarimAziev/km-elisp
 ;; Version: 0.1.0
 ;; Keywords: lisp
-;; Package-Requires: ((emacs "26.1"))
+;; Package-Requires: ((emacs "28.1"))
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;; This file is NOT part of GNU Emacs.
@@ -35,6 +35,9 @@
 (declare-function feature-file "loadhist")
 (declare-function file-dependents "loadhist")
 (declare-function file-requires "loadhist")
+(declare-function find-library-name "find-func")
+(declare-function lm-summary "lisp-mnt")
+(declare-function lm-website "lisp-mnt")
 
 (defcustom km-elisp-right-partial-functions '(fp-rpartial
                                               igist-rpartial)
@@ -754,6 +757,105 @@ Argument FEAT is the name of the feature to analyze as a string."
                                (mapconcat #'km-elisp-make-feat-link
                                           feat-requires "\n")))
                      #'special-mode)))
+
+(defun km-elisp--indent-comments-backward ()
+  "Indent comment lines backward according to the current mode."
+  (indent-according-to-mode)
+  (skip-chars-backward "\s\t")
+  (while (looking-back "^[;]+[^;\n]+\n" 0)
+    (forward-line -1)
+    (indent-according-to-mode)
+    (skip-chars-backward "\s\t")))
+
+(defun km-elisp--get-comments-bounds-backward ()
+  "Return the bounds of comment blocks preceding the current point."
+  (let ((beg)
+        (end (point)))
+    (while (looking-back "^[\s]*[;]+[^;\n]+\n[\s]*" 0)
+      (forward-line -1)
+      (setq beg (point)))
+    (and beg (cons beg end))))
+
+
+;;;###autoload
+(defun km-elisp-add-use-package-descriptions ()
+  "Add summaries to `use-package' declarations in the current buffer."
+  (interactive)
+  (require 'find-func)
+  (require 'lisp-mnt)
+  (let ((regex
+         (concat "(use-package[\s\t]+" "\\(" lisp-mode-symbol-regexp "\\)")))
+    (save-excursion
+      (goto-char (point-max))
+      (let ((result))
+        (while (re-search-backward regex nil t 1)
+          (let ((name (match-string-no-properties 1)))
+            (let* ((file (ignore-errors (find-library-name name)))
+                   (summary (and file
+                                 (when-let ((text (lm-summary file)))
+                                   (concat
+                                    ";; "
+                                    (capitalize (substring-no-properties
+                                                 text
+                                                 0 1))
+                                    (substring-no-properties text
+                                                             1)))))
+                   (url (and file
+                             (when-let ((website (lm-website file)))
+                               (concat ";; " website))))
+                   (description
+                    (when (or
+                           summary
+                           url)
+                      (string-join
+                       (delq
+                        nil
+                        (list
+                         summary
+                         url))
+                       "\n"))))
+              (when description
+                (pcase-let* ((`(,beg . ,end)
+                              (save-excursion
+                                (km-elisp--get-comments-bounds-backward)))
+                             (curr-text
+                              (when (and beg end)
+                                (buffer-substring-no-properties
+                                 beg end)))
+                             (lines (and curr-text
+                                         (split-string curr-text "\n" t)))
+                             (curr-summary (pop lines))
+                             (curr-url (pop lines)))
+                  (when curr-summary
+                    (setq curr-summary (string-trim curr-summary)))
+                  (when curr-url
+                    (setq curr-url (string-trim curr-url)))
+                  (cond ((and lines) nil)
+                        ((and
+                          url
+                          (not curr-url)
+                          curr-summary
+                          summary
+                          (string= curr-summary summary))
+                         (insert (if (looking-back "\n[\s]*" 0) "" "\n")
+                                 url "\n"))
+                        ((and
+                          curr-summary
+                          summary
+                          (string= (downcase curr-summary)
+                                   (downcase summary)))
+                         (delete-region beg end)
+                         (insert (if (looking-back "\n[\s]*" 0) "" "\n")
+                                 description
+                                 "\n"))
+                        (t (insert
+                            (concat
+                             (if (looking-back "\n[\s]*" 0) "" "\n")
+                             description
+                             "\n"))))))
+              (km-elisp--indent-comments-backward)
+              (push (cons name summary) result))))
+        result))))
 
 
 (provide 'km-elisp)
