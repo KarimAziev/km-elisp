@@ -33,6 +33,31 @@
 (declare-function xref-item-summary "xref")
 (declare-function find-library-name "find-fun")
 (declare-function feature-file "loadhist")
+
+
+(defcustom km-elisp-use-package-symbol-names '("use-package"
+                                               "use-package!")
+  "List of symbol names for extra `use-package' declarations.
+
+A list of symbol names that represent `use-package' macros or functions.
+
+Each element in the list should be a string that corresponds to the name of a
+`use-package' macro or function. These names are used to identify `use-package'
+declarations when performing operations such as searching for package
+declarations or copying their configurations.
+
+The default value includes common variations of `use-package' declarations.
+Users can add or remove entries to customize the behavior of functions that rely
+on this list.
+
+To modify this list, use `M-x `customize-option'` and search for the
+corresponding customization option, then add or remove strings as needed. Ensure
+that each entry is an exact match for the `use-package' macro or function name
+used in the Emacs configuration."
+  :group 'straight-extra
+  :type '(repeat string))
+
+
 (declare-function file-dependents "loadhist")
 (declare-function file-requires "loadhist")
 (declare-function find-library-name "find-func")
@@ -40,7 +65,8 @@
 (declare-function lm-website "lisp-mnt")
 
 (defcustom km-elisp-right-partial-functions '(fp-rpartial
-                                              igist-rpartial)
+                                              igist-rpartial
+                                              js-imports--rpartial)
   "Symbols representing functions that partially apply arguments from the right.
 
 These functions take a function and some arguments, and return a new function
@@ -54,7 +80,10 @@ For example, `fp-rpartial` and `igist-rpartial` are such functions."
 (defcustom km-elisp-left-partial-functions '(apply-partially apply funcall
                                              funcall-interactively fp-partial
                                              fp-compose fp-converge fp-use-with
-                                             fp-pipe fp-ignore-args igist-compose)
+                                             fp-pipe fp-ignore-args
+                                             igist-compose
+                                             js-imports--compose
+                                             js-imports--partial)
   "Symbols representing functions that take another function as the first argument.
 
 These functions typically call the given function with the remaining arguments.
@@ -560,6 +589,65 @@ Usage:
             (when file
               (list (elisp--xref-make-xref 'feature symbol file))))))))
 
+(defun km-elisp--inside-use-package-p-at-point ()
+  "Check if point is on a `use-package' form."
+  (or
+   (when-let ((sexp (sexp-at-point)))
+     (and
+      (car-safe sexp)
+      (symbolp (car-safe sexp))
+      (member (symbol-name (car sexp)) km-elisp-use-package-symbol-names)
+      (listp (cdr sexp))
+      (symbolp (cadr sexp))
+      (cadr sexp)))
+   (when (looking-at (concat "(use-package[\s\t\n]+\\("
+                             lisp-mode-symbol-regexp "\\)"))
+     (match-string-no-properties 1))))
+
+(defun km-elisp--ensure-beg-of-sexp ()
+  "Move point to the beginning of the current s-expression."
+  (pcase-let ((`(,beg . ,_end)
+               (bounds-of-thing-at-point 'sexp)))
+    (when beg
+      (goto-char beg))))
+
+(defun km-elisp--inside-use-package-cons-cell (&rest keywords)
+  "Check if point is inside a `use-package' cons cell with specified keywords.
+
+Argument KEYWORDS is a list of symbols to check against during the search."
+  (km-elisp--ensure-beg-of-sexp)
+  (when (looking-back "\\.[\s\t\n]*" 0)
+    (let ((inside-keyword))
+      (while (and (condition-case nil
+                      (progn (backward-up-list)
+                             (setq inside-keyword
+                                   (progn (skip-chars-backward "\s\t\n")
+                                          (unless (nth 4 (syntax-ppss (point)))
+                                            (memq (symbol-at-point)
+                                                  keywords))))
+                             (not inside-keyword))
+                    (error nil))))
+      (and inside-keyword
+           (condition-case nil
+               (progn (backward-up-list)
+                      (km-elisp--inside-use-package-p-at-point))
+             (error nil))))))
+
+;;;###autoload
+(defun km-elisp-insert-random-string (&optional length)
+  "Insert random string with length LENGTH."
+  (interactive (list 12))
+  (let ((chars (append (mapcar #'char-to-string
+                               (number-sequence (string-to-char
+                                                 "A")
+                                                (string-to-char
+                                                 "Z")))
+                       (mapcar #'number-to-string (number-sequence 0 9)))))
+    (let ((str))
+      (dotimes (_i length)
+        (setq str (concat str (elt chars (random (length chars))))))
+      (insert (prin1-to-string str)))))
+
 
 (defun km-elisp-extend-expect-function-p (pos)
   "Return non-nil if the symbol at position POS is expected to be a function.
@@ -571,27 +659,32 @@ additional macros specified in `km-elisp-expect-functions-ranges'.
 
 \\=(advice-add \\='elisp--expect-function-p :after-until
               #\\='km-elisp-extend-expect-function-p)"
-  (when-let* ((parent-sexp (save-excursion
-                             (let ((parent (nth 1 (syntax-ppss pos))))
-                               (when parent
-                                 (goto-char parent)
-                                 (sexp-at-point)))))
-              (parent-cell (assq (car-safe parent-sexp)
-                                 km-elisp-expect-functions-ranges)))
-    (pcase-let ((`(,_sym ,min-idx ,max-idx) parent-cell))
-      (when (eq max-idx t)
-        (setq max-idx most-positive-fixnum))
-      (save-excursion
-        (goto-char pos)
-        (let ((count 0)
-              (parse-sexp-ignore-comments t))
-          (when (sexp-at-point)
-            (backward-sexp))
-          (while (condition-case nil
-                     (progn (backward-sexp 1)
-                            (setq count (1+ count)))
-                   (error nil)))
-          (<= min-idx count max-idx))))))
+  (let ((parse-sexp-ignore-comments t))
+    (or (save-excursion
+          (goto-char pos)
+          (km-elisp--inside-use-package-cons-cell :bind :bind*
+                                                  :hook))
+        (when-let* ((parent-sexp (save-excursion
+                                   (let ((parent (nth 1 (syntax-ppss pos))))
+                                     (when parent
+                                       (goto-char parent)
+                                       (sexp-at-point)))))
+                    (parent-cell (assq (car-safe parent-sexp)
+                                       km-elisp-expect-functions-ranges)))
+          (pcase-let ((`(,_sym ,min-idx ,max-idx) parent-cell))
+            (when (eq max-idx t)
+              (setq max-idx most-positive-fixnum))
+            (save-excursion
+              (goto-char pos)
+              (let ((count 0)
+                    (parse-sexp-ignore-comments t))
+                (when (sexp-at-point)
+                  (backward-sexp))
+                (while (condition-case nil
+                           (progn (backward-sexp 1)
+                                  (setq count (1+ count)))
+                         (error nil)))
+                (<= min-idx count max-idx))))))))
 
 (defun km-elisp-apply-while-no-input (fn &rest args)
   "Apply function FN with ARGS while no input is pending.
@@ -790,71 +883,75 @@ Argument FEAT is the name of the feature to analyze as a string."
       (let ((result))
         (while (re-search-backward regex nil t 1)
           (let ((name (match-string-no-properties 1)))
-            (let* ((file (ignore-errors (find-library-name name)))
-                   (summary (and file
-                                 (when-let ((text (lm-summary file)))
-                                   (concat
-                                    ";; "
-                                    (capitalize (substring-no-properties
-                                                 text
-                                                 0 1))
-                                    (substring-no-properties text
-                                                             1)))))
-                   (url (and file
-                             (when-let ((website (lm-website file)))
-                               (concat ";; " website))))
-                   (description
-                    (when (or
+            (unless
+                (let ((stx (syntax-ppss (point))))
+                  (or (nth 3 stx)
+                      (nth 4 stx)))
+              (let* ((file (ignore-errors (find-library-name name)))
+                     (summary (and file
+                                   (when-let ((text (lm-summary file)))
+                                     (concat
+                                      ";; "
+                                      (capitalize (substring-no-properties
+                                                   text
+                                                   0 1))
+                                      (substring-no-properties text
+                                                               1)))))
+                     (url (and file
+                               (when-let ((website (lm-website file)))
+                                 (concat ";; " website))))
+                     (description
+                      (when (or
+                             summary
+                             url)
+                        (string-join
+                         (delq
+                          nil
+                          (list
                            summary
-                           url)
-                      (string-join
-                       (delq
-                        nil
-                        (list
-                         summary
-                         url))
-                       "\n"))))
-              (when description
-                (pcase-let* ((`(,beg . ,end)
-                              (save-excursion
-                                (km-elisp--get-comments-bounds-backward)))
-                             (curr-text
-                              (when (and beg end)
-                                (buffer-substring-no-properties
-                                 beg end)))
-                             (lines (and curr-text
-                                         (split-string curr-text "\n" t)))
-                             (curr-summary (pop lines))
-                             (curr-url (pop lines)))
-                  (when curr-summary
-                    (setq curr-summary (string-trim curr-summary)))
-                  (when curr-url
-                    (setq curr-url (string-trim curr-url)))
-                  (cond ((and lines) nil)
-                        ((and
-                          url
-                          (not curr-url)
-                          curr-summary
-                          summary
-                          (string= curr-summary summary))
-                         (insert (if (looking-back "\n[\s]*" 0) "" "\n")
-                                 url "\n"))
-                        ((and
-                          curr-summary
-                          summary
-                          (string= (downcase curr-summary)
-                                   (downcase summary)))
-                         (delete-region beg end)
-                         (insert (if (looking-back "\n[\s]*" 0) "" "\n")
-                                 description
-                                 "\n"))
-                        (t (insert
-                            (concat
-                             (if (looking-back "\n[\s]*" 0) "" "\n")
-                             description
-                             "\n"))))))
-              (km-elisp--indent-comments-backward)
-              (push (cons name summary) result))))
+                           url))
+                         "\n"))))
+                (when description
+                  (pcase-let* ((`(,beg . ,end)
+                                (save-excursion
+                                  (km-elisp--get-comments-bounds-backward)))
+                               (curr-text
+                                (when (and beg end)
+                                  (buffer-substring-no-properties
+                                   beg end)))
+                               (lines (and curr-text
+                                           (split-string curr-text "\n" t)))
+                               (curr-summary (pop lines))
+                               (curr-url (pop lines)))
+                    (when curr-summary
+                      (setq curr-summary (string-trim curr-summary)))
+                    (when curr-url
+                      (setq curr-url (string-trim curr-url)))
+                    (cond ((and lines) nil)
+                          ((and
+                            url
+                            (not curr-url)
+                            curr-summary
+                            summary
+                            (string= curr-summary summary))
+                           (insert (if (looking-back "\n[\s]*" 0) "" "\n")
+                                   url "\n"))
+                          ((and
+                            curr-summary
+                            summary
+                            (string= (downcase curr-summary)
+                                     (downcase summary)))
+                           (delete-region beg end)
+                           (insert (if (looking-back "\n[\s]*" 0) "" "\n")
+                                   description
+                                   "\n"))
+                          (t (insert
+                              (concat
+                               (if (looking-back "\n[\s]*" 0) "" "\n")
+                               description
+                               "\n"))))))
+                (km-elisp--indent-comments-backward)
+                (push (cons name summary) result)))))
         result))))
 
 
