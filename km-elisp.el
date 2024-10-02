@@ -634,19 +634,37 @@ Argument KEYWORDS is a list of symbols to check against during the search."
              (error nil))))))
 
 ;;;###autoload
-(defun km-elisp-insert-random-string (&optional length)
-  "Insert random string with length LENGTH."
-  (interactive (list 12))
+(defun km-elisp-insert-random-string (&optional length upcased)
+  "Insert a random alphanumeric string of specified LENGTH and case.
+
+Optional argument LENGTH specifies the length of the random string. It defaults
+to 12.
+
+Optional argument UPCASED determines if the string should be in uppercase. It
+defaults to t."
+  (interactive (list 12 t))
   (let ((chars (append (mapcar #'char-to-string
                                (number-sequence (string-to-char
-                                                 "A")
+                                                 (if upcased "A" "a"))
                                                 (string-to-char
-                                                 "Z")))
+                                                 (if upcased "Z" "z"))))
                        (mapcar #'number-to-string (number-sequence 0 9)))))
     (let ((str))
       (dotimes (_i length)
         (setq str (concat str (elt chars (random (length chars))))))
       (insert (prin1-to-string str)))))
+
+;;;###autoload
+(defun km-elisp-insert-random-hash (&optional length upcased)
+  "Insert a random hash string with specified LENGTH.
+
+Optional argument LENGTH specifies the length of the random hash string,
+defaulting to 64.
+
+Optional argument UPCASED determines whether the hash string should be in
+uppercase, defaulting to nil."
+  (interactive (list 64 nil))
+  (km-elisp-insert-random-string length upcased))
 
 
 (defun km-elisp-extend-expect-function-p (pos)
