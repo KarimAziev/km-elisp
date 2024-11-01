@@ -105,7 +105,7 @@ This function should be used as a `:filter-return' advice for
 
 \\=(advice-add \\='elisp--fnsym-in-current-sexp :filter-return
               \\='km-elisp-extend-fnsym-in-current-sexp)"
-  (when-let ((argument (car (last result))))
+  (when-let* ((argument (car (last result))))
     (if (<= argument 1)
         result
       (let ((fn-sym (car result)))
@@ -536,7 +536,7 @@ MENU."
          (let ((print-level nil))
            (funcall km-elisp-sexp-to-string-fn
                     (macroexpand-all sexp)))))
-    (when-let ((key (this-command-keys-vector)))
+    (when-let* ((key (this-command-keys-vector)))
       (setq map (make-sparse-keymap map))
       (define-key map key #'km-elisp-macroexpand-sexp-at-point))
     (let ((buffer (get-buffer-create "*km-elisp-macroexpand*")))
@@ -592,7 +592,7 @@ Usage:
 (defun km-elisp--inside-use-package-p-at-point ()
   "Check if point is on a `use-package' form."
   (or
-   (when-let ((sexp (sexp-at-point)))
+   (when-let* ((sexp (sexp-at-point)))
      (and
       (car-safe sexp)
       (symbolp (car-safe sexp))
@@ -907,7 +907,7 @@ Argument FEAT is the name of the feature to analyze as a string."
                       (nth 4 stx)))
               (let* ((file (ignore-errors (find-library-name name)))
                      (summary (and file
-                                   (when-let ((text (lm-summary file)))
+                                   (when-let* ((text (lm-summary file)))
                                      (concat
                                       ";; "
                                       (capitalize (substring-no-properties
@@ -916,7 +916,7 @@ Argument FEAT is the name of the feature to analyze as a string."
                                       (substring-no-properties text
                                                                1)))))
                      (url (and file
-                               (when-let ((website (lm-website file)))
+                               (when-let* ((website (lm-website file)))
                                  (concat ";; " website))))
                      (description
                       (when (or
@@ -971,6 +971,7 @@ Argument FEAT is the name of the feature to analyze as a string."
                 (km-elisp--indent-comments-backward)
                 (push (cons name summary) result)))))
         result))))
+
 
 
 (provide 'km-elisp)
