@@ -10,7 +10,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Python 3.10
       uses: actions/setup-python@v4
       with:
@@ -25,7 +25,7 @@ jobs:
       env:
         LOCAL_REPO: ${{ github.workspace }}
         # RECIPE is your recipe as written for MELPA:
-        RECIPE: (km-elisp :repo "KarimAziev/km-elisp" :fetcher github)
+        RECIPE: (km-elisp :fetcher github :repo "KarimAziev/km-elisp")
         # set this to false (or remove it) if the package isn't on MELPA:
         EXIST_OK: false
       run: echo $GITHUB_REF && make -C ~/melpazoid
