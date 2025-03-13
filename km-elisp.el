@@ -633,6 +633,13 @@ Argument KEYWORDS is a list of symbols to check against during the search."
                       (km-elisp--inside-use-package-p-at-point))
              (error nil))))))
 
+(defun km-elisp--guess-region-length ()
+  "Calculate the length of the active region if it exists."
+  (when (and (use-region-p)
+             (region-active-p))
+    (- (region-end)
+       (region-beginning))))
+
 ;;;###autoload
 (defun km-elisp-insert-random-string (&optional length upcased)
   "Insert a random alphanumeric string of specified LENGTH and case.
@@ -642,7 +649,7 @@ to 12.
 
 Optional argument UPCASED determines if the string should be in uppercase. It
 defaults to t."
-  (interactive (list 12 t))
+  (interactive (list (or (km-elisp--guess-region-length) 12) t))
   (let ((chars (append (mapcar #'char-to-string
                                (number-sequence (string-to-char
                                                  (if upcased "A" "a"))
@@ -663,8 +670,32 @@ defaulting to 64.
 
 Optional argument UPCASED determines whether the hash string should be in
 uppercase, defaulting to nil."
-  (interactive (list 64 nil))
+  (interactive (list (or (km-elisp--guess-region-length) 64) nil))
   (km-elisp-insert-random-string length upcased))
+
+;;;###autoload
+(defun km-elisp-insert-random-number (&optional length)
+  "Insert a random number with specified LENGTH.
+
+Optional argument LENGTH specifies the length of the random hash string,
+defaulting to 64.
+
+Optional argument UPCASED determines whether the hash string should be in
+uppercase, defaulting to nil."
+  (interactive (list (if (and (use-region-p)
+                              (region-active-p))
+                         (- (region-end)
+                            (region-beginning))
+                       (read-number "Length: "))))
+  (let ((chars (mapcar #'number-to-string (number-sequence 0 9))))
+    (let ((str))
+      (dotimes (_i length)
+        (setq str (concat str (elt chars (random (length chars))))))
+      (when (and (region-active-p)
+                 (use-region-p))
+        (delete-region (region-beginning)
+                       (region-end)))
+      (insert str))))
 
 
 (defun km-elisp-extend-expect-function-p (pos)
